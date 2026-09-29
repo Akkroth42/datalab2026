@@ -19,7 +19,7 @@
  * Difficulty: 1
  */
 int bitAnd(int x, int y) {
-    return 2;
+    return ~(~x | ~y);
 }
 
 /*
@@ -30,7 +30,7 @@ int bitAnd(int x, int y) {
  *   Difficulty: 1
  */
 int bitXor(int x, int y) {
-    return 2;
+    return ~(~x & ~y)&~(x & y);
 }
 
 /*
@@ -50,7 +50,9 @@ int bitXor(int x, int y) {
  *   1 if x and y have the same sign , 0 otherwise.
  */
 int samesign(int x, int y) {
-    return 2;
+    int sx=x>>31;
+    int sy=y>>31;
+    return !(sx^sy)&!((!x)^(!y));
 }
 
 /*
@@ -63,7 +65,14 @@ int samesign(int x, int y) {
  *   Difficulty: 4
  */
 int logtwo(int v) {
-    return 2;
+    int r = 0;
+    int t;
+    t = (v > 0xFFFF) << 4;  r = r | t;  v = v >> t;
+    t = (v > 0xFF)   << 3;  r = r | t;  v = v >> t;
+    t = (v > 0xF)    << 2;  r = r | t;  v = v >> t;
+    t = (v > 0x3)    << 1;  r = r | t;  v = v >> t;
+    t = (v > 0x1);          r = r | t;
+    return r;
 }
 
 /*
@@ -76,7 +85,13 @@ int logtwo(int v) {
  *    Difficulty: 2
  */
 int byteSwap(int x, int n, int m) {
-    return 2;
+    int n8 = n << 3;
+    int m8 = m << 3;
+    int bn = (x >> n8) & 0xFF;
+    int bm = (x >> m8) & 0xFF;
+    int mn = 0xFF << n8;
+    int mm = 0xFF << m8;
+    return (x & ~(mn | mm)) | (bn << m8) | (bm << n8);
 }
 
 /*
@@ -88,7 +103,12 @@ int byteSwap(int x, int n, int m) {
  *   Difficulty: 3
  */
 unsigned reverse(unsigned v) {
-    return 2;
+    v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
+    v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) << 2);
+    v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
+    v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
+    v = (v >> 16) | (v << 16);
+    return v;
 }
 
 /*
@@ -100,7 +120,7 @@ unsigned reverse(unsigned v) {
  *   Difficulty: 3
  */
 int logicalShift(int x, int n) {
-    return 2;
+   return (x >> n) & ~((~0 << (31 + ~n + 1)) << 1);
 }
 
 /*
@@ -112,7 +132,16 @@ int logicalShift(int x, int n) {
  *   Difficulty: 4
  */
 int leftBitCount(int x) {
-    return 2;
+    int v = ~x;
+    int r = 0;
+    int t;
+    t = !(v >> 16);  r = r + (t << 4);  v = v << (t << 4);
+    t = !(v >> 24);  r = r + (t << 3);  v = v << (t << 3);
+    t = !(v >> 28);  r = r + (t << 2);  v = v << (t << 2);
+    t = !(v >> 30);  r = r + (t << 1);  v = v << (t << 1);
+    t = !(v >> 31);  r = r + t;
+    t = !v;          r = r + t;
+    return r;
 }
 
 /*
@@ -124,7 +153,31 @@ int leftBitCount(int x) {
  *   Difficulty: 4
  */
 unsigned float_i2f(int x) {
-    return 2;
+    unsigned m, e, frac, half, rest, sign;
+    if (x == 0)
+        return 0;
+    m = x;
+    sign = 0;                        /* 赋值不占符号数 */
+    if (x < 0) {
+        m = ~m + 1;                  /* 无符号取反加一 = 绝对值，INT_MIN 安全 */
+        sign = 0x80000000;
+    }
+    e = 31;
+    while (!(m >> e))
+        e = e - 1;
+    if (e > 23) {
+        frac = (m >> (e - 23)) & 0x7FFFFF;
+        half = 1 << (e - 24);
+        rest = m & (half + half - 1);
+        if (rest > half)
+            frac = frac + 1;
+        if (rest == half)
+            if (frac & 1)
+                frac = frac + 1;
+    } else {
+        frac = (m << (23 - e)) & 0x7FFFFF;
+    }
+    return sign + ((e + 127) << 23) + frac;
 }
 
 /*
@@ -139,7 +192,19 @@ unsigned float_i2f(int x) {
  *   Difficulty: 4
  */
 unsigned floatScale2(unsigned uf) {
-    return 2;
+    unsigned exp = (uf >> 23) & 0xFF;
+    unsigned sign = uf & 0x80000000;
+    if (exp == 0xFF) {              /* NaN 或无穷：返回原值 */
+        return uf;
+    }
+    if (exp == 0) {                 /* 非规格化数或 0：尾数左移 */
+        return sign | (uf << 1);
+    }
+    exp = exp + 1;
+    if (exp == 0xFF) {              /* 指数溢出：变为无穷 */
+        return sign | 0x7F800000;
+    }
+    return (uf & 0x807FFFFF) | (exp << 23);
 }
 
 /*
@@ -156,7 +221,21 @@ unsigned floatScale2(unsigned uf) {
  *   Difficulty: 3
  */
 int float64_f2i(unsigned uf1, unsigned uf2) {
-    return 2;
+    int e = (uf2 >> 20) & 0x7FF;
+    int sign = uf2 >> 31;
+    unsigned mh = (uf2 & 0xFFFFF) | 0x100000;   /* 尾数高20位 + 隐含1 */
+    unsigned mag;
+    if (e >= 2047) return 0x80000000;           /* NaN / 无穷 */
+    if (e < 1023) return 0;                     /* |x| < 1，向零舍入 */
+    e = e - 1023;
+    if (e > 30) return 0x80000000;              /* 溢出 */
+    if (e > 20) {
+        mag = (mh << (e - 20)) | (uf1 >> (52 - e));
+    } else {
+        mag = mh >> (20 - e);
+    }
+    if (sign) mag = -mag;                       /* 无符号取反即补码，无 UB */
+    return mag;
 }
 
 /*
@@ -173,5 +252,11 @@ int float64_f2i(unsigned uf1, unsigned uf2) {
  *   Difficulty: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+        if (x > 127)
+        return 0x7F800000;          /* 太大：+INF */
+    if (x + 126 >= 0)
+        return (x + 127) << 23;     /* 规格化数 */
+    if (x + 149 >= 0)
+        return 1 << (x + 149);      /* 非规格化数 */
+    return 0;   
 }
